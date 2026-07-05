@@ -1,25 +1,59 @@
-# 校园闲置流转助手
+# 校园闲置流转助手 / Campus Idle Exchange Platform
 
-**自研生产级校园二手交易 + 智能匹配平台**  
-从 n8n/Coze 低代码原型升级为全栈自研系统
+**自研生产级校园二手交易 + 智能匹配平台 | Production-grade campus marketplace with custom task state machine**  
+从 n8n/Coze 低代码原型升级为全栈自研系统 | Evolved from n8n/Coze prototypes to a self-built Python full-stack system
 
 ---
 
-## 📋 项目总结（简历用）
+## 🎬 演示视频 / Demo Video
 
-### 项目概述
-自研全栈校园二手交易平台，实现用户认证、物品发布/搜索、订单交易闭环，以及基于**自研任务状态机 + Redis 可靠队列 + APScheduler 重试调度**的异步任务引擎。从低代码原型（n8n/Coze）全面升级为生产级 Python 全栈系统，支持 Docker Compose 一键部署与 Prometheus + Grafana 可观测性。
+> 完整演示自研任务状态机：任务创建 → 入队 → Worker 消费 → 状态流转 → 失败重试 → 最终成功/失败  
+> Full walkthrough of the custom task state machine: create → enqueue → consume → transition → retry → terminal state
 
-### 面试核心卖点
+**[▶ 观看演示视频 / Watch Demo](./assets/demo-state-machine.mp4)**
 
-| 卖点 | 说明 |
-|------|------|
-| **自研任务状态机** | 替代规则引擎，实现 PENDING→PROCESSING→SUCCESS/FAILED 完整生命周期，支持指数退避重试（最多 10 次）与定时自愈调度 |
-| **可靠异步队列** | 基于 Redis List 的 LPUSH/BRPOP 实现，Worker 守护进程消费，失败自动重入队 + 死信处理 |
-| **全栈交易闭环** | 用户注册/登录（JWT）→ 物品发布/搜索 → 订单创建/状态流转（7 种状态），完整 CRUD + 搜索分页 |
-| **可观测性** | Prometheus 采集 API/Worker/PostgreSQL/Redis 指标，Grafana 可视化面板 |
-| **容器化部署** | Docker Compose 一键启动 6 个服务（API + Worker + PostgreSQL + Redis + Prometheus + Grafana） |
-| **生产就绪** | 异步 SQLAlchemy + 连接池管理、CORS 中间件、健康检查、生命周期管理、SQLite/PostgreSQL 双适配 |
+| 演示内容 Demo Coverage | 说明 Description |
+|------------------------|------------------|
+| 任务状态机 Task FSM | `PENDING → PROCESSING → SUCCESS / FAILED`，含指数退避重试 |
+| Redis 可靠队列 Reliable Queue | LPUSH / BRPOP 异步消费，失败自动重入队 |
+| 订单状态机 Order FSM | 7 种订单状态完整流转闭环 |
+| API 联调 API Integration | FastAPI 路由 + 任务回调验证 |
+
+---
+
+## 📋 项目总结（简历用）/ Project Summary (Resume)
+
+### 项目概述 / Overview
+
+**中文**：自研全栈校园二手交易平台，实现用户认证、物品发布/搜索、订单交易闭环，以及基于**自研任务状态机 + Redis 可靠队列 + APScheduler 重试调度**的异步任务引擎。核心亮点是**不依赖 Celery / 规则引擎**，用显式状态机 + 数据库持久化 + 定时自愈实现生产级可靠性。
+
+**English**: A self-built full-stack campus marketplace with JWT auth, product listing/search, order lifecycle, and an async task engine powered by a **custom task state machine**, **Redis reliable queue**, and **APScheduler retry scheduler**—without Celery or external rule engines. State transitions are explicit, persisted, and self-healing.
+
+### 面试核心卖点 / Interview Highlights
+
+| 卖点 Highlight | 中文说明 | English |
+|----------------|----------|---------|
+| **自研任务状态机 Custom Task FSM** | 显式定义 `PENDING→PROCESSING→SUCCESS/FAILED`，非法跃迁拒绝；支持指数退避重试（最多 10 次）与 APScheduler 定时扫描自愈 | Explicit FSM with illegal transition rejection; exponential backoff (max 10 retries) + scheduled self-healing |
+| **可靠异步队列 Reliable Async Queue** | Redis List LPUSH/BRPOP + Worker 守护进程；失败重入队，重试耗尽进入 FAILED 终态 | Redis queue + worker daemon; failed tasks re-enqueued; dead-letter on exhaustion |
+| **双状态机设计 Dual State Machines** | 任务状态机（异步引擎）+ 订单状态机（交易闭环）分离，职责清晰、可独立演进 | Task FSM (async engine) + Order FSM (trade flow) decoupled for clear ownership |
+| **全栈交易闭环 Full Trade Loop** | JWT 注册/登录 → 物品 CRUD/搜索 → 订单 7 态流转，完整 REST API + 分页 | JWT auth → product CRUD/search → 7-state order flow with paginated REST APIs |
+| **可观测性 Observability** | Prometheus 指标 + Grafana 面板，覆盖 API / Worker / DB / Redis | Prometheus metrics + Grafana dashboards for API, worker, DB, Redis |
+| **容器化部署 Containerized** | Docker Compose 一键启动 6 服务（API + Worker + PG + Redis + Prometheus + Grafana） | One-command Docker Compose with 6 services |
+| **生产就绪 Production-ready** | 异步 SQLAlchemy 连接池、CORS、健康检查、生命周期钩子、SQLite/PG 双适配 | Async SQLAlchemy pool, CORS, health checks, lifespan hooks, SQLite/PostgreSQL |
+
+### 为什么自研状态机？/ Why a Custom State Machine?
+
+**中文**：
+- **可控**：每个状态跃迁在代码中显式定义，面试时可逐行讲解，比黑盒队列更体现工程深度
+- **可测**：E2E 测试覆盖完整流转路径（见 `test_state_machine_e2e.py`）
+- **可扩展**：新增任务类型只需继承 `BaseTask`，状态机逻辑零改动
+- **可交付**：失败重试、死信、定时自愈——对标 $60k–$85k 远程自动化/后端岗位的生产级要求
+
+**English**:
+- **Controllable**: Every transition is explicit in code—easy to walk through in interviews vs. black-box queues
+- **Testable**: E2E tests cover full transition paths (`test_state_machine_e2e.py`)
+- **Extensible**: New task types inherit `BaseTask` without changing FSM core logic
+- **Deliverable**: Retry, dead-letter, and scheduled recovery meet production bar for remote backend/automation roles
 
 ---
 
